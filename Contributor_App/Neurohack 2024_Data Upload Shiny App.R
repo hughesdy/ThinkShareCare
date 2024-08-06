@@ -5,7 +5,7 @@ library(shiny)
 library(shinyjs)
 library(shinyWidgets)
 
-setwd("~/Desktop/Neurohack/Project/App")
+setwd("~/Documents/github")
 
 # Define the list of possible variables
 possible_vars <- c("Age", "Sex", "Gender", "SES", "Education", "Income", "GAD-7", "PHQ-9")
