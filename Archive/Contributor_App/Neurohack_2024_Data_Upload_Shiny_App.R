@@ -6,7 +6,7 @@ library(shinyjs)
 library(shinyWidgets)
 
 
-setwd("~/Documents/github")
+setwd("~/Documents/github/ThinkShareCare/Contributor_App")
 
 # Define the list of possible variables
 possible_vars <- c("Age", "Sex", "Gender", "Education", "Income", "GAD-7", "PHQ-9")
@@ -15,10 +15,10 @@ possible_vars <- c("Age", "Sex", "Gender", "Education", "Income", "GAD-7", "PHQ-
 ui <- fluidPage(
   
   # Add the header image at the top
-  tags$div(
-    tags$img(src = "ThinkShareCare_Logo.png", style = "width: 100%; height: auto; max-width: 250px;"),
-    style = "text-align: center;"
-  ),
+  #tags$div(
+    #tags$img(src = "ThinkShareCare_Logo.png", style = "width: 100%; height: auto; max-width: 250px;"),
+    #style = "text-align: center;"
+  #),
   
   # App title and instructions
   titlePanel("Contributor Data Upload and Variable Selection Tool"),

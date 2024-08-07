@@ -1,0 +1,12 @@
+name: Contributor_App_Test
+title: Contributor_App_Test
+username: hughesdy
+account: hughesdy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 12421994
+bundleId: 8958307
+url: https://hughesdy.shinyapps.io/Contributor_App_Test/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
