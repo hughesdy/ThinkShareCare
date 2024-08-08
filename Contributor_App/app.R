@@ -15,14 +15,18 @@ Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAQMEY53X73DF2AD6C",
 #setwd("~/Documents/github/ThinkShareCare/Contributor_App_Test")
 
 # Define the list of possible variables
-possible_vars <- c("Age", "Sex", "Gender", "Education", "Income", "GAD-7", "PHQ-9")
+possible_vars <- c("Age", "Sex Assigned at Birth", "Gender Identity", "Income", "Education", "GAD7", "PHQ9", "BDI", "PSS", "LEC-5", "SIPS", "PQB", "CBCL", "FSIQ", "MDD_dx_lifetime", "GAD_dx_lifetime", "SZ_dx_lifetime", "SAD_dx_lifetime", "OCD_dx_lifetime", "BPI_dx_lifetime", "BPII_dx_lifetime", "PTSD_dx_lifetime", "SUD_dx_lifetime", "AUD_dx_lifetime", "ADHD_dx_lifetime")
 
 # Define the UI for the app
 ui <- fluidPage(
   
-  # Add the header image at the top
+  # Add the header image at the top with a button above aligned to the right
   tags$div(
-    tags$img(src = "ThinkShareCare_Logo.png", style = "width: 100%; height: auto; max-width: 250px;"),
+    tags$div(
+      style = "text-align: right; margin-bottom: 10px;",  # Align button to the right and add margin below
+      downloadButton("downloadDictionary", "Download Variable Dictionary")
+    ),
+    tags$img(src = "ThinkShareCare_Logo.png", style = "width: 100%; height: auto; max-width: 500px;"),
     style = "text-align: center;"
   ),
   
@@ -77,7 +81,7 @@ server <- function(input, output, session) {
     })
     # Outcome variable (a required field)
     fixed_outcome_field <- selectizeInput("outcome", label = "Outcome",
-                                     choices = c("Select Outcome" = "","ADHD_dx_current", "SCZ"),
+                                     choices = c("Select Outcome" = "","MDD_dx_current", "GAD_dx_current", "SZ_dx_current", "SAD_dx_current", "OCD_dx_current", "BPI_dx_current", "BPII_dx_current", "PTSD_dx_current", "SUD_dx_current", "AUD_dx_current", "ADHD_dx_current"),
                                      options = list(create = FALSE),
                                      selected = input[["outcome"]])
     #Combine fixed and dynamic fields
@@ -212,14 +216,19 @@ server <- function(input, output, session) {
       removeModal()
     })
     
-    
-    
-    
-    
   })
   
- 
+  # Download handler for variable dictionary
+  output$downloadDictionary <- downloadHandler(
+    filename = function() {
+      "variable_dictionary.csv"
+    },
+    content = function(file) {
+      file.copy("www/variable_dictionary.csv", file)
+    }
+  )
 }
+
 
 # Run the application
 shinyApp(ui = ui, server = server)
