@@ -53,8 +53,6 @@ contributor_ui <- function(id) {
       p("Please search and select the names of your variables in the order they are listed in your dataset. Variable 1 will be ID, and Variable 2 will be the variable listed in the second column of your dataset, and so on."),
       
       uiOutput(ns("dynamic_inputs")),
-      uiOutput(ns("dynamic_inputs_details")),
-      actionButton(ns("addField"), "Add New Field"),
       actionButton(ns("submit"), "Run Model"),
       textOutput(ns("error_msg")), # Add a text output to display error messages
       verbatimTextOutput(ns("printResults")),
@@ -71,8 +69,7 @@ contributor_ui <- function(id) {
 
 contributor_server <- function(input, output, session) {
   
-  # Reactive value to store the number of input fields;
-  
+  # Reactive value to store the number of input fields
   field_count <- reactiveVal(0)
   
   # Reactive value to store the data frame
@@ -80,44 +77,24 @@ contributor_server <- function(input, output, session) {
   
   # Render the dynamic inputs
   output$dynamic_inputs <- renderUI({
-    fields <- lapply(1:(field_count()+1), function(i) {
-      selectizeInput(paste0("var", i), label = paste("Variable", i),
-                     choices = c("Select Variable" = "", possible_vars, "Add New Variable" = "new"),
-                     options = list(create = FALSE),
-                     selected = input[[paste0("var", i)]])
-    })
-    # Outcome variable (a required field)
-    fixed_outcome_field <- selectizeInput("outcome", label = "Outcome",
-                                          choices = c("Select Outcome" = "","MDD_dx_current", "GAD_dx_current", "SZ_dx_current", "SAD_dx_current", "OCD_dx_current", "BPI_dx_current", "BPII_dx_current", "PTSD_dx_current", "SUD_dx_current", "AUD_dx_current", "ADHD_dx_current"),
-                                          options = list(create = FALSE),
-                                          selected = input[["outcome"]])
-    #Combine fixed and dynamic fields
-    tagList(fixed_outcome_field, fields)
+    # Predictor variable (allows multiple selections)
+    predictor_field <- selectizeInput("predictor", 
+                                      label = "Predictors",
+                                      choices = c("Select Predictors" = "", possible_predictors),
+                                      options = list(create = FALSE),
+                                      multiple = TRUE,  # Allows multiple selections
+                                      selected = input[["predictor"]])
     
-  })
-  
-  # Render additional fields for new variables
-  output$dynamic_inputs_details <- renderUI({
-    details <- lapply(1:(field_count()+1), function(i) {
-      if (input[[paste0("var", i)]] == "new") {
-        tagList(
-          tags$div(style = "margin-left: 20px; margin-top: 10px;",
-                   textInput(paste0("var_name_", i), label = paste("Variable", i, "Name"), placeholder = "Enter variable name", value = input[[paste0("var_name_", i)]]),
-                   radioButtons(paste0("var_type_", i), label = paste("Variable", i, "Type"), choices = c("Numerical" = "numerical", "Categorical" = "categorical"), selected = input[[paste0("var_type_", i)]]),
-                   textInput(paste0("var_desc_", i), label = paste("Variable", i, "Description (up to 100 characters)"), placeholder = "Enter description", width = "100%", value = input[[paste0("var_desc_", i)]])
-          )
-        )
-      }
-    })
-    tagList(details)
-  })
-  
-  # # Add new field
-  observeEvent(input$addField, {
-    current_count <- field_count()
-    if (current_count < 100) {
-      field_count(current_count + 1)
-    }
+    # Outcome variable (a required field)
+    outcome_field <- selectizeInput("outcome", 
+                                    label = "Outcome",
+                                    choices = c("Select Outcome" = "", possible_outcomes),
+                                    options = list(create = FALSE),
+                                    multiple = TRUE,  # Allows multiple selections
+                                    selected = input[["outcome"]])
+    
+    # Combine fixed and dynamic fields
+    tagList(outcome_field, predictor_field)
   })
   
   
@@ -162,15 +139,6 @@ contributor_server <- function(input, output, session) {
       
       var <- input[[paste0("var", i)]]
       
-      if (var == "new") {
-        list(
-          name = input[[paste0("var_name_", i)]],
-          type = input[[paste0("var_type_", i)]],
-          description = input[[paste0("var_desc_", i)]]
-        )
-      } else {
-        var
-      }
     })
     
     selected_vars_and_outcome = c(input[[paste0("outcome")]], selected_vars)
@@ -223,6 +191,8 @@ contributor_server <- function(input, output, session) {
       removeModal()
     })
     
+    #Make it so that it will look at the predictors that were run by contributors and match it up to model that is already in the things; some overlapping predictors
+    ##########################################################
   })
   
   # Download handler for variable dictionary
