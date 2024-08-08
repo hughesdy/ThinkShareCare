@@ -5,7 +5,12 @@ library(shiny)
 library(shinyjs)
 library(shinyWidgets)
 library(rsconnect)
+library(aws.s3)
 
+# Set AWS credentials
+Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAQMEY53X73DF2AD6C",
+           "AWS_SECRET_ACCESS_KEY" = "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",
+           "AWS_DEFAULT_REGION" = "us-west-2")
 
 #setwd("~/Documents/github/ThinkShareCare/Contributor_App_Test")
 
@@ -40,7 +45,9 @@ ui <- fluidPage(
       actionButton("addField", "Add New Field"),
       actionButton("submit", "Run Model"),
       textOutput("error_msg"), # Add a text output to display error messages
-      verbatimTextOutput("printResults")
+      verbatimTextOutput("printResults"),
+      uiOutput("s3filename"),
+      textOutput("uploadStatus")
     ),
     
     mainPanel(
@@ -70,7 +77,7 @@ server <- function(input, output, session) {
     })
     # Outcome variable (a required field)
     fixed_outcome_field <- selectizeInput("outcome", label = "Outcome",
-                                     choices = c("Select Outcome" = "","ADHD", "SCZ"),
+                                     choices = c("Select Outcome" = "","ADHD_dx_current", "SCZ"),
                                      options = list(create = FALSE),
                                      selected = input[["outcome"]])
     #Combine fixed and dynamic fields
@@ -138,7 +145,7 @@ server <- function(input, output, session) {
   # Handle submit action
   observeEvent(input$submit, {
     req(df())  # Ensure df is not NULL
-    print(field_count())
+    #print(field_count())
     # Collect the selected variables, starting with the outcome variable
     selected_vars <- sapply(1:(field_count()+1), function(i) {
       
@@ -158,18 +165,55 @@ server <- function(input, output, session) {
     selected_vars_and_outcome = c(input[[paste0("outcome")]], selected_vars)
     
     # Print the selected variables for demonstration
-    # output$printResults <- renderText(paste0(selected_vars_and_outcome))
-    
+    #output$printResults <- renderText(paste0(selected_vars_and_outcome))
+
     # Build Model
     model_leftSide = paste0(selected_vars_and_outcome[1], " ~ ")
     model_rightSide = paste0(selected_vars_and_outcome[2:length(selected_vars_and_outcome)],
                              collapse = " + ")
-    fullModel_pasted = paste0("lm(", model_leftSide, model_rightSide, ", data)")
-    formula_pasted = paste0(model_leftSide, model_rightSide)
     
+    # Print model
+    fullModel_pasted = paste0("lm(", model_leftSide, model_rightSide, ", data)")
+    output$printResults = renderText(fullModel_pasted)
+    
+    # Run model
+    formula_pasted = paste0(model_leftSide, model_rightSide)
     model = lm(formula(formula_pasted), df())
     
-    output$printResults = renderText(fullModel_pasted)
+    # Get coefficients
+    summ = summary(model)
+    coef = as.data.frame(summ$coefficients)
+    weights = data.frame("predictor" = rownames(coef),
+                         "weight" = coef$Estimate,
+                         "outcome" = c(selected_vars_and_outcome[1], rep("", (nrow(coef)-1))))
+    
+    showModal(modalDialog(
+      title = "Save to S3",
+      textInput("s3filename", "Filename to be uploaded to S3"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("proceed", "Proceed")
+      )
+    ))
+    
+    write_csv_norownames <- function(object, file) {
+      write.csv(object, file = file, row.names=F)
+    }
+    
+    observeEvent(input$proceed, {
+      req(input$s3filename)
+      s3write_using(x = weights,
+                    FUN = write_csv_norownames,
+                    object = input$s3filename,
+                    bucket = "thinksharecare-beta1"
+                    )
+
+      output$uploadStatus = renderText(paste0("Update successful!"))
+      removeModal()
+    })
+    
+    
+    
     
     
   })
