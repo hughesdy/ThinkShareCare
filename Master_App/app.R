@@ -3,11 +3,23 @@ library(shinyjs)
 library(shinyWidgets)
 library(rsconnect)
 library(aws.s3)
+library(metafor)
+
+## Master App
+
 
 # Set AWS credentials
 Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAQMEY53X73DF2AD6C",
            "AWS_SECRET_ACCESS_KEY" = "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",
            "AWS_DEFAULT_REGION" = "us-west-2")
+
+# pull variables from server
+possible_vars <- s3read_using(FUN = read.csv, object = "possible_vars.csv", bucket = "thinksharecare-beta1")
+
+possible_predictors <- possible_vars[,1]
+
+possible_outcomes <-  possible_vars[,2]
+
 
 # Define the paths to the UI and server files
 # contributor_ui_path <- file.path("..", "Contributor_App", "app.R")
@@ -47,7 +59,7 @@ contributor_ui <- function(id) {
       textOutput(ns("error_msg")), # Add a text output to display error messages
       verbatimTextOutput(ns("printResults")),
       uiOutput(ns("s3filename")),
-      textOutput(ns("uploadStatus"))
+      textOutput(ns("uploadStatus")),
     ),
     
     mainPanel(
@@ -59,20 +71,12 @@ contributor_ui <- function(id) {
 
 contributor_server <- function(input, output, session) {
   
-  
   # Reactive value to store the number of input fields;
   
   field_count <- reactiveVal(0)
   
   # Reactive value to store the data frame
   df <- reactiveVal(NULL)
- 
-  ######################
-  possible_vars <- s3read_using(FUN = read.csv, object = "possible_vars.csv", bucket = "thinksharecare-beta1")
-  
-  possible_predictors <- ####FILL ME IN###
-    
-  possible_outcomes <-  #####FILL ME IN##
   
   # Render the dynamic inputs
   output$dynamic_inputs <- renderUI({
