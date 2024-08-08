@@ -40,7 +40,12 @@ ui <- fluidPage(
       
       actionButton("searchModels", "Search Models"),
       
-      uiOutput("modelList")  # Output for displaying model names
+      uiOutput("modelList"),  # Output for displaying model names
+      
+      uiOutput("variable_inputs"),
+      
+      textOutput("testprint")
+      
     ),
     
     mainPanel(
@@ -113,16 +118,45 @@ server <- function(input, output, session) {
     weights <- as.numeric(model_df[2:nrow(model_df), 2])
     variables <- model_df[2:nrow(model_df), 1]
     
-    pt_values <- sapply(variables, function(var) input[[var]])
+    showModal(modalDialog(
+      title = "Patient characteristics",
+      uiOutput("predictors"),
+      easyClose = T,
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("proceed", "Proceed")
+      )
+    ))
     
-    if (all(!is.na(pt_values))) {
-      individual_terms <- sum(weights * pt_values)
-      predicted <- intercept + individual_terms
+    output$predictors <- renderUI({
+      fields <- lapply(variables, function(var) {
+        textInput(inputId = tolower(var), label = var)
+      })
+      do.call(tagList, fields)
+    })
+    
+    observeEvent(input$proceed, {
+      pt_values <- sapply(variables, function(var) input[[tolower(var)]])
       
-      HTML(paste0("<b>Predicted value: ", round(predicted, 3), "</b>"))
-    } else {
-      HTML("")
-    }
+      #output$testprint = renderText(paste0(pt_values, ":", weights))
+      
+      if (all(!is.na(pt_values))) {
+        individual_terms <- sum(as.numeric(weights) * as.numeric(pt_values))
+        
+        predicted <- as.numeric(intercept + individual_terms)
+        
+        #HTML(paste0("<b>Predicted value: ", round(predicted, 3), "</b>"))
+        output$testprint = renderText(paste0("Predicted value: ", round(predicted, 3)))
+      } else {
+        HTML("")
+      }
+      
+      removeModal()
+    })
+    
+    
+    
+    
   })
   
   # Download handler for variable dictionary
