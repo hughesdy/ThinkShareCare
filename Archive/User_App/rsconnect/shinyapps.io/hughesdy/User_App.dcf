@@ -1,0 +1,12 @@
+name: User_App
+title: User_App
+username: hughesdy
+account: hughesdy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 12422063
+bundleId: 8958318
+url: https://hughesdy.shinyapps.io/User_App/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
