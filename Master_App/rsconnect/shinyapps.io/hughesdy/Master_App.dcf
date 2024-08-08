@@ -1,0 +1,12 @@
+name: Master_App
+title: Master_App
+username: hughesdy
+account: hughesdy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 12423859
+bundleId: 8960504
+url: https://hughesdy.shinyapps.io/Master_App/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
