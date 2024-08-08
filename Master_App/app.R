@@ -53,11 +53,14 @@ contributor_ui <- function(id) {
       p("Please search and select the names of your variables in the order they are listed in your dataset. Variable 1 will be ID, and Variable 2 will be the variable listed in the second column of your dataset, and so on."),
       
       uiOutput(ns("dynamic_inputs")),
-      actionButton(ns("submit"), "Run Model"),
+      actionButton(ns("runmodel"), "Run Model"),
       textOutput(ns("error_msg")), # Add a text output to display error messages
       verbatimTextOutput(ns("printResults")),
       uiOutput(ns("s3filename")),
       textOutput(ns("uploadStatus")),
+      
+      actionButton(ns("test"), "What is going on.."),
+      textOutput(ns("testprint")),
     ),
     
     mainPanel(
@@ -81,17 +84,17 @@ contributor_server <- function(input, output, session) {
     predictor_field <- selectizeInput("predictor", 
                                       label = "Predictors",
                                       choices = c("Select Predictors" = "", possible_predictors),
-                                      options = list(create = FALSE),
+                                      #options = list(create = FALSE),
                                       multiple = TRUE,  # Allows multiple selections
-                                      selected = input[["predictor"]])
+                                      selected = NULL)
     
     # Outcome variable (a required field)
     outcome_field <- selectizeInput("outcome", 
                                     label = "Outcome",
                                     choices = c("Select Outcome" = "", possible_outcomes),
                                     options = list(create = FALSE),
-                                    multiple = TRUE,  # Allows multiple selections
-                                    selected = input[["outcome"]])
+                                    multiple = TRUE)  # Allows multiple selections
+                                    #selected = input[["outcome"]])
     
     # Combine fixed and dynamic fields
     tagList(outcome_field, predictor_field)
@@ -130,22 +133,30 @@ contributor_server <- function(input, output, session) {
     })
   })
   
-  # Handle submit action
-  observeEvent(input$submit, {
+  observeEvent(input$test, {
+    output$testprint = renderText(paste0(input$predictor))
+  })
+  
+  
+  # Handle run model action
+  observeEvent(input$runmodel, {
+    
     req(df())  # Ensure df is not NULL
     #print(field_count())
     # Collect the selected variables, starting with the outcome variable
-    selected_vars <- sapply(1:(field_count()+1), function(i) {
-      
-      var <- input[[paste0("var", i)]]
-      
-    })
+    # selected_vars <- sapply(1:(field_count()+1), function(i) {
+    # 
+    #   var <- input$predictor
+    # 
+    # })
     
-    selected_vars_and_outcome = c(input[[paste0("outcome")]], selected_vars)
+    
+    selected_vars = input$predictor
+    
+    selected_vars_and_outcome = c(input$outcome, selected_vars)
     
     # Print the selected variables for demonstration
     #output$printResults <- renderText(paste0(selected_vars_and_outcome))
-    
     # Build Model
     model_leftSide = paste0(selected_vars_and_outcome[1], " ~ ")
     model_rightSide = paste0(selected_vars_and_outcome[2:length(selected_vars_and_outcome)],
