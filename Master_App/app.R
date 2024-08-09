@@ -4,7 +4,7 @@ library(shinyWidgets)
 library(rsconnect)
 library(aws.s3)
 library(metafor)
-
+library(dplyr)
 ## Master App
 
 
@@ -13,8 +13,9 @@ Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAQMEY53X73DF2AD6C",
            "AWS_SECRET_ACCESS_KEY" = "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",
            "AWS_DEFAULT_REGION" = "us-west-2")
 
+
 # pull variables from server
-possible_vars <- s3read_using(FUN = read.csv, object = "possible_vars.csv", bucket = "thinksharecare-beta1")
+possible_vars <- s3read_using(FUN = read.csv, object = "possible_vars.csv", bucket = 'thinksharecare-beta1')
 
 possible_predictors <- possible_vars[,1]
 
@@ -52,14 +53,24 @@ contributor_ui <- function(id) {
       h4("Select Your Variables"),
       p("Please search and select the names of your variables in the order they are listed in your dataset. Variable 1 will be ID, and Variable 2 will be the variable listed in the second column of your dataset, and so on."),
       
-      uiOutput(ns("dynamic_inputs")),
+      selectizeInput(ns("outcome"), 
+                     label = "Outcome",
+                     choices = c("Select Outcome" = "", possible_outcomes),
+                     multiple = TRUE),  # Allows multiple selections
+      
+      selectizeInput(ns("predictor"), 
+                     label = "Predictors",
+                     choices = c("Select Predictors" = "", possible_predictors),
+                     multiple = TRUE),
+      
       actionButton(ns("runmodel"), "Run Model"),
       textOutput(ns("error_msg")), # Add a text output to display error messages
       verbatimTextOutput(ns("printResults")),
       uiOutput(ns("s3filename")),
       textOutput(ns("uploadStatus")),
+      textOutput(ns("metaregUpdate")), # to provide update about whether metaregression can be performed
       
-      actionButton(ns("test"), "What is going on.."),
+      ## In case you need to debug
       textOutput(ns("testprint")),
     ),
     
@@ -72,39 +83,15 @@ contributor_ui <- function(id) {
 
 contributor_server <- function(input, output, session) {
   
-  # Reactive value to store the number of input fields
-  field_count <- reactiveVal(0)
   
   # Reactive value to store the data frame
   df <- reactiveVal(NULL)
-  
-  # Render the dynamic inputs
-  output$dynamic_inputs <- renderUI({
-    # Predictor variable (allows multiple selections)
-    predictor_field <- selectizeInput("predictor", 
-                                      label = "Predictors",
-                                      choices = c("Select Predictors" = "", possible_predictors),
-                                      #options = list(create = FALSE),
-                                      multiple = TRUE,  # Allows multiple selections
-                                      selected = NULL)
-    
-    # Outcome variable (a required field)
-    outcome_field <- selectizeInput("outcome", 
-                                    label = "Outcome",
-                                    choices = c("Select Outcome" = "", possible_outcomes),
-                                    options = list(create = FALSE),
-                                    multiple = TRUE)  # Allows multiple selections
-                                    #selected = input[["outcome"]])
-    
-    # Combine fixed and dynamic fields
-    tagList(outcome_field, predictor_field)
-  })
   
   
   # Load and validate data when a file is uploaded
   observe({
     req(input$file)
-    
+
     tryCatch({
       uploaded_df <- read.csv(input$file$datapath)
       
@@ -133,33 +120,21 @@ contributor_server <- function(input, output, session) {
     })
   })
   
-  observeEvent(input$test, {
-    output$testprint = renderText(paste0(input$predictor))
-  })
-  
-  
   # Handle run model action
   observeEvent(input$runmodel, {
     
     req(df())  # Ensure df is not NULL
-    #print(field_count())
-    # Collect the selected variables, starting with the outcome variable
-    # selected_vars <- sapply(1:(field_count()+1), function(i) {
-    # 
-    #   var <- input$predictor
-    # 
-    # })
+    
+    selected_predictors = input$predictor
     
     
-    selected_vars = input$predictor
-    
-    selected_vars_and_outcome = c(input$outcome, selected_vars)
+    selected_predictors_and_outcome = c(input$outcome, selected_predictors)
     
     # Print the selected variables for demonstration
-    #output$printResults <- renderText(paste0(selected_vars_and_outcome))
+    # output$testprint <- renderText(paste0(selected_vars_and_outcome))
     # Build Model
-    model_leftSide = paste0(selected_vars_and_outcome[1], " ~ ")
-    model_rightSide = paste0(selected_vars_and_outcome[2:length(selected_vars_and_outcome)],
+    model_leftSide = paste0(selected_predictors_and_outcome[1], " ~ ")
+    model_rightSide = paste0(selected_predictors_and_outcome[2:length(selected_predictors_and_outcome)],
                              collapse = " + ")
     
     # Print model
@@ -175,35 +150,136 @@ contributor_server <- function(input, output, session) {
     coef = as.data.frame(summ$coefficients)
     weights = data.frame("predictor" = rownames(coef),
                          "weight" = coef$Estimate,
-                         "outcome" = c(selected_vars_and_outcome[1], rep("", (nrow(coef)-1))))
+                         "se" = coef$`Std. Error`,
+                         "r2" = summ$adj.r.squared,
+                         "outcome" = c(selected_predictors_and_outcome[1], rep("", (nrow(coef)-1))))
     
-    showModal(modalDialog(
-      title = "Save to S3",
-      textInput("s3filename", "Filename to be uploaded to S3"),
-      footer = tagList(
-        modalButton("Cancel"),
-        actionButton("proceed", "Proceed")
-      )
-    ))
+    s3filename = paste0("individual_models/Outcome-", paste0(input$outcome),
+                        "__Pred-", paste(selected_predictors, collapse = "+"), ".csv")
     
     write_csv_norownames <- function(object, file) {
       write.csv(object, file = file, row.names=F)
     }
     
-    observeEvent(input$proceed, {
-      req(input$s3filename)
-      s3write_using(x = weights,
-                    FUN = write_csv_norownames,
-                    object = input$s3filename,
-                    bucket = "thinksharecare-beta1"
-      )
-      
-      output$uploadStatus = renderText(paste0("Update successful!"))
-      removeModal()
-    })
+    output$testprint = renderText(paste0("Saved file to bucket as: ", s3filename))
+    
+    s3write_using(x = weights,
+                  FUN = write_csv_norownames,
+                  object = s3filename,
+                  bucket = "thinksharecare-beta1"
+    )
+    
+    
+    output$uploadStatus = renderText(paste0("Upload successful!"))
+    
     
     #Make it so that it will look at the predictors that were run by contributors and match it up to model that is already in the things; some overlapping predictors
     ##########################################################
+    model_files <- get_bucket('thinksharecare-beta1', prefix = "individual_models/")
+    
+    output$testprint = renderText(paste0(model_files))
+    
+    if ("Contents" %in% names(model_files)) {
+      model_files <- sapply(model_files, function(x) x$Key)
+    } else {
+      model_files <- character(0)  # If no files are found, return an empty character vector
+    }
+    
+    # --
+    # Check the server for models for which all predictors are contained within the current model (provided by contributor). If there are overlapping models, re-run them in a meta-regression
+    # --
+    matched = 0 # initialize a variable that will keep track of the number of matched models
+  
+    # Iterate through the files in the s3 bucket
+    for (file in model_files) {
+      model_df <- s3read_using(FUN = read.csv, object = as.character(file), bucket = 'thinksharecare-beta1')
+      variable_names <- model_df[2:nrow(model_df),1]
+      
+      ## If the predictors in the ith server model overlap with the currently provided model, pull the weights/standard errors and run the meta regression
+      if (all(variable_names %in% selected_predictors) && model_df[1,5] == input$outcome) {
+
+        if (matched == 0) {
+          ## If there's a match, we want to create a dataframe initialized with the weights and standard errors from the current model
+          pred_df = data.frame("predictor" = variable_names)
+          
+          ## add to dataframe the current weights and stderrs
+          matched_effects = left_join(pred_df,
+                                      select(weights, predictor, weight),
+                                      by = "predictor")
+          colnames(matched_effects)[2] = "model0_weight" # indicate that these weights correspond to the current model weights (i.e., the zero-th model)
+          
+          matched_stderrs = left_join(pred_df,
+                                      select(weights, predictor, se),
+                                      by = "predictor")
+          colnames(matched_stderrs)[2] = "model0_stderr" # indicate that these standard errors correspond to the current model standard errors (i.e., of the zero-th model)
+          
+          matched = matched + 1
+          
+        } else {
+          
+          effName = paste0("model", matched, "_weight")
+          seName = paste0("model", matched, "_stderr")
+          
+          matched_effects = left_join(matched_effects, 
+                                      select(model_df, predictor, weight),
+                                      by = "predictor")
+          colnames(matched_effects)[matched + 1] = effName 
+          
+          matched_stderrs = left_join(matched_stderrs,
+                                      select(model_df, predictor, se),
+                                      by = "predictor")
+          colnames(matched_stderrs)[matched + 1] = seName
+          
+          matched = matched + 1
+        }
+        
+      }
+    }
+    
+    ## If there are matches and we've pulled the corresponding effect sizes and standard errors, then we will run the meta-regression
+    
+    if (matched > 0) {
+
+      output$metaregUpdate = renderText(paste0("Overlapping variables found. Running metaregression...."))
+      
+      
+      # Create dataframe to store metareg coefficients;
+
+      # for Neurohack24, we are only including I2 as a metric to assess the reliability/trustability of the metaregression weight. If editors choose to update this in the future, this will be the place in the code to edit to accomodate other metrics
+      metaregOutput = data.frame("predictor" = variable_names,
+                                 "weight" = rep(NA, length(variable_names)),
+                                 "i2" = rep(NA, length(variable_names)))
+
+
+      ## Iterate over rows in matched_effects dataframe. Each row corresponds to a different predictor in a multivariable model. Thus, for each predictor we will input its weights and standard errors (across models/studies) into the metaregression algorithm to 'tune' the estimate
+      for (i in c(1:nrow(matched_effects))) {
+        forMeta = data.frame("eff" = matched_effects[i, 2:ncol(matched_effects)],
+                                "se" = matched_stderrs[i, 2:ncol(matched_stderrs)])
+
+        metareg = rma.uni(yi = forMeta$eff,
+                          sei = forMeta$se,
+                          method = "REML")
+
+        metaregOutput$weight[i] = as.numeric(metareg$beta)
+        metaregOutput$i2[i] = as.numeric(metareg$I2)
+      }
+      
+      ## write metaregOuput to .csv in the s3 server
+      s3filename_deconstructed = strsplit(s3filename,
+                                          split = ".",
+                                          fixed = T)[[1]]
+      
+      s3filename_metareg = paste0(s3filename_deconstructed[1],
+                                  "__METAREG.",
+                                  s3filename_deconstructed[2])
+      
+      s3write_using(x = metaregOutput,
+                    FUN = write_csv_norownames,
+                    object = s3filename_metareg,
+                    bucket = "thinksharecare-beta1"
+      )
+    }
+
   })
   
   # Download handler for variable dictionary
@@ -234,13 +310,13 @@ user_ui <- function(id) {
         
         tags$div(style = "margin-top: 20px;",  # Add margin above "Select Predictors:"
                  selectInput(ns("predictors"), "Select Predictors:", 
-                             choices = c("Select Predictors" = "", "Age", "Sex Assigned at Birth", "Gender Identity", "Income", "Education", "GAD7", "PHQ9", "BDI", "PSS", "LEC-5", "SIPS", "PQB", "CBCL", "FSIQ", "MDD_dx_lifetime", "GAD_dx_lifetime", "SZ_dx_lifetime", "SAD_dx_lifetime", "OCD_dx_lifetime", "BPI_dx_lifetime", "BPII_dx_lifetime", "PTSD_dx_lifetime", "SUD_dx_lifetime", "AUD_dx_lifetime", "ADHD_dx_lifetime"),
+                             choices = c("Select Predictors" = "", possible_predictors),
                              selected = NULL, 
                              multiple = TRUE)
         ),
         
         selectInput(ns("outcome"), "Select Outcome:",
-                    choices = c("Select Outcome" = "", "MDD_dx_current", "GAD_dx_current", "SZ_dx_current", "SAD_dx_current", "OCD_dx_current", "BPI_dx_current", "BPII_dx_current", "PTSD_dx_current", "SUD_dx_current", "AUD_dx_current", "ADHD_dx_current"),
+                    choices = c("Select Outcome" = "", possible_outcomes),
                     selected = NULL),
         
         actionButton(ns("searchModels"), "Search Models"),
@@ -267,7 +343,7 @@ user_server <- function(input, output, session) {
   
   observeEvent(input$searchModels, {
     # Fetch the list of model files from S3
-    model_files <- get_bucket("thinksharecare-beta1")
+    model_files <- get_bucket('thinksharecare-beta1')
     print(model_files)  # Debugging: print model_files
     
     if ("Contents" %in% names(model_files)) {
@@ -280,7 +356,7 @@ user_server <- function(input, output, session) {
     # Filter models based on user input
     filtered_models <- NULL
     for (file in model_files) {
-      model_df <- s3read_using(FUN = read.csv, object = as.character(file), bucket = "thinksharecare-beta1")
+      model_df <- s3read_using(FUN = read.csv, object = as.character(file), bucket = 'thinksharecare-beta1')
       variable_names <- model_df[2:nrow(model_df),1]
       if (all(input$predictors %in% variable_names) && input$outcome %in% model_df[1,3]) {
         filtered_models <- c(filtered_models, file)
@@ -301,7 +377,7 @@ user_server <- function(input, output, session) {
     if (!is.null(input$selectedModel)) {
       # Fetch and read the selected model file from S3
       model_file <- input$selectedModel
-      model_df <- s3read_using(FUN = read.csv, object = model_file, bucket = "thinksharecare-beta1")
+      model_df <- s3read_using(FUN = read.csv, object = model_file, bucket = 'thinksharecare-beta1')
       
       # Display the model weights
       output$modelWeights <- renderUI({
@@ -318,7 +394,7 @@ user_server <- function(input, output, session) {
     req(input$selectedModel)
     
     model_file <- input$selectedModel
-    model_df <- s3read_using(FUN = read.csv, object = model_file, bucket = "thinksharecare-beta1")
+    model_df <- s3read_using(FUN = read.csv, object = model_file, bucket = 'thinksharecare-beta1')
     
     intercept <- as.numeric(model_df[1, 2])
     weights <- as.numeric(model_df[2:nrow(model_df), 2])
